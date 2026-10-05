@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CentEnd Static Avalanche</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #111;
+}
+
+#main-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+#music-ctrl {
+  position: fixed;
+  bottom: 18px;
+  left: 18px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+#music-btn {
+  pointer-events: all;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: rgba(10, 10, 10, 0.82);
+  border: 1px solid rgba(192, 57, 43, 0.55);
+  color: #e8e8e8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s;
+  font-family: monospace;
+}
+#music-btn:hover {
+  background: rgba(192, 57, 43, 0.3);
+  border-color: #c0392b;
+}
+
+#music-info {
+  pointer-events: none;
+  font-family: 'Special Elite', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  color: rgba(153,153,153,0.5);
+  line-height: 1.7;
+  max-width: 150px;
+  white-space: normal;
+}
+</style>
+    <link rel="icon" type="image/png" href="background/centend.png">
+</head>
+<body>
+
+<audio id="bgm" src="background/bgm.mp3" loop></audio>
+
+<iframe id="main-frame" name="main"></iframe>
+
+<div id="music-ctrl">
+  <button id="music-btn" title="音乐开关">♪</button>
+  <div id="music-info">All You're Going to Want to Do Is Get Back There<br>— The Caretaker</div>
+</div>
+
+<script>
+  const PAGE_KEY = 'centend_current_page';
+  const frame = document.getElementById('main-frame');
+
+  let startPage = 'centend/index.html';
+  try {
+    const saved = sessionStorage.getItem(PAGE_KEY);
+    if (saved) startPage = saved;
+  } catch (e) {}
+  frame.src = startPage;
+
+  frame.addEventListener('load', () => {
+    try {
+      sessionStorage.setItem(PAGE_KEY, frame.contentWindow.location.href);
+    } catch (e) {}
+  });
+
+  window.centendUnlocked = false;
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.cent === 'query-unlock') {
+      try { ev.source.postMessage({ cent: 'unlock-state', unlocked: !!window.centendUnlocked }, '*'); } catch (e) {}
+    } else if (d.cent === 'set-unlock') {
+      window.centendUnlocked = true;
+    }
+  });
+
+  const audio = document.getElementById('bgm');
+  const btn   = document.getElementById('music-btn');
+
+  const MUSIC_KEY      = 'centend_music_paused';
+  const MUSIC_TIME_KEY = 'centend_music_time';
+
+  try {
+    const savedTime = parseFloat(sessionStorage.getItem(MUSIC_TIME_KEY));
+    if (!isNaN(savedTime) && savedTime > 0) {
+      audio.currentTime = savedTime;
+    }
+  } catch (e) {}
+
+  const wasPaused = sessionStorage.getItem(MUSIC_KEY) === '1';
+
+  function tryPlay() {
+    return audio.play().then(() => {
+      btn.textContent = '♪';
+    });
+  }
+
+  function armResumeOnInteraction() {
+    const events = ['pointerdown', 'keydown', 'touchstart', 'click', 'wheel'];
+    const resume = () => {
+      tryPlay().catch(() => {});
+      removeListeners();
+    };
+    const removeListeners = () => {
+      events.forEach(evt => window.removeEventListener(evt, resume, true));
+    };
+    events.forEach(evt => window.addEventListener(evt, resume, true));
+
+    frame.addEventListener('load', () => {
+      try {
+        const doc = frame.contentWindow.document;
+        events.forEach(evt => doc.addEventListener(evt, resume, true));
+      } catch (e) {}
+    });
+  }
+
+  if (!wasPaused) {
+    tryPlay().catch(() => armResumeOnInteraction());
+  } else {
+    btn.textContent = '‖';
+  }
+
+  setInterval(() => {
+    try {
+      sessionStorage.setItem(MUSIC_TIME_KEY, audio.currentTime);
+    } catch (e) {}
+  }, 1000);
+
+  btn.addEventListener('click', () => {
+    if (audio.paused) {
+      audio.play();
+      btn.textContent = '♪';
+      try { sessionStorage.setItem(MUSIC_KEY, '0'); } catch (e) {}
+    } else {
+      audio.pause();
+      btn.textContent = '‖';
+      try { sessionStorage.setItem(MUSIC_KEY, '1'); } catch (e) {}
+    }
+  });
+</script>
+
+</body>
+</html>
